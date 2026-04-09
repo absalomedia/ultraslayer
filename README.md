@@ -48,7 +48,7 @@ Running this in a standard shell introduces OS jitter. You must run the binary w
 
 ```bash
 # Run with real-time priority 99
-sudo chrt -f 99 ./target/release/ultraslayer-rs
+sudo chrt -f 99 ./target/release/ultraslayer
 ```
 
 ---
