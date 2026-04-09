@@ -2,7 +2,7 @@
 
 `UltraSlayer` is a specialized hardware-aware memory library designed for High-Frequency Trading (HFT) and ultra-low latency systems. It targets a specific, often ignored source of jitter: **DRAM Refresh Stalls (tREFI)**. 
 
-This is a very early and alpha attempt at a Rust port of @LaurenWired's TailSlayer, based on her original and extensive work: https://github.com/LaurieWired/tailslayer
+This is a very early and alpha attempt at a Rust port of @LaurieWired's TailSlayer, based on her original and extensive work: https://github.com/LaurieWired/tailslayer
 
 ## 🎯 The Problem: The "DRAM Tail"
 
@@ -14,7 +14,7 @@ UltraSlayer eliminates this by mirroring critical data across multiple physical 
 
 ## The Inspiration: LaurenWired
 
-@LaurenWired released her work as a C++ version, as it is her prior art, with her video on this model of memory management: https://www.youtube.com/watch?v=KKbgulTp3FE . Based on the vibes, I decided to soft port a version to Rust. It is very alpha at this stage. Here be dragons. You have been warned.
+@LaurieWired released her work as a C++ version, as it is her prior art, with her video on this model of memory management: https://www.youtube.com/watch?v=KKbgulTp3FE . Based on the vibes, I decided to soft port a version to Rust. It is very alpha at this stage. Here be dragons. You have been warned.
 
 ## 🛠 Setup & Installation
 
