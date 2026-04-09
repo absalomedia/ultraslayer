@@ -1,0 +1,27 @@
+[package]
+name        = "ultraslayer"
+version     = "0.1.0"
+edition     = "2021"
+description = "Ultra-low latency DRAM refresh stall prevention using hardware-level hedging."
+
+[dependencies]
+libc          = "0.2"
+core_affinity = "0.8"
+crossbeam     = "0.8"
+
+[profile.release]
+lto              = true           # Full LTO — use "thin" for faster builds with near-identical perf
+opt-level        = 3              # Aggressive speed optimisation
+panic            = "abort"        # Remove unwinding overhead for deterministic latency
+codegen-units    = 1              # Maximise inlining across the whole binary
+strip            = "symbols"      # Smaller binary, faster load
+overflow-checks  = false          # Remove integer overflow branches
+debug            = false          # Ensure no debug info bloat
+
+[profile.dev]
+opt-level        = 1              # Enough for dev perf without full compile times
+debug            = true
+
+[profile.bench]
+inherits         = "release"
+debug            = true           # Keep symbols so perf/flamegraphs still work
