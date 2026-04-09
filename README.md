@@ -35,7 +35,7 @@ To achieve nanosecond precision, you must compile with **Link Time Optimization 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/ultraslayer
+git clone https://github.com/absalomedia/ultraslayer
 cd ultraslayer
 
 # Build for release
