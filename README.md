@@ -55,7 +55,7 @@ sudo chrt -f 99 ./target/release/ultraslayer
 
 ## 📊 Performance & Benchmarks
 
-| Metric | Standard `Vec<T>` / Heap | UltraSlayer-RS | Benefit |
+| Metric | Standard `Vec<T>` / Heap | UltraSlayer | Benefit |
 | :--- | :--- | :--- | :--- |
 | **Average Latency** | $\sim 60\text{ns}$ | $\sim 70\text{ns}$ | Slight overhead due to signal |
 | **99.9th Percentile** | $\sim 200\text{ns} - 500\text{ns}$ | $\sim 80\text{ns} - 100\text{ns}$ | **Massive Reduction** |
