@@ -68,8 +68,7 @@ sudo chrt -f 99 ./target/release/ultraslayer
 ## ⚠️ Critical Warnings
 
 1. **CPU Consumption**: The Slayer Core is designed to **spin-wait**. It will utilize 100% of the assigned physical core. This is intentional to keep the CPU in a "hot" state and prevent C-state transitions (power-saving sleep) which add milliseconds of latency.
-2. **Hardware Dependency**: The `replica_offset` is tuned for x86_64 (Intel/AMD) architectures. If using ARM (Graviton), the offset in `arch.rs` must be calibrated to the specific SoC memory controller.
-3. **Memory Safety**: This library uses `unsafe` blocks and `volatile` reads to bypass compiler optimizations. Ensure your data structures are `#[repr(C)]` to prevent the compiler from reordering fields.
+2. **Memory Safety**: This library uses `unsafe` blocks and `volatile` reads to bypass compiler optimizations. Ensure your data structures are `#[repr(C)]` to prevent the compiler from reordering fields.
 
 ***
 
