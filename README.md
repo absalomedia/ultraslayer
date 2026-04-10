@@ -12,7 +12,7 @@ In standard memory access, if a CPU request hits a DRAM chip exactly when it is 
 
 UltraSlayer eliminates this by mirroring critical data across multiple physical DRAM channels. It uses a single, pinned "Slayer Core" to issue parallel reads. By racing the requests at the CPU pipeline level, it ensures that if one channel is stalled, the other channel provides the data, effectively "flattening" the latency curve.
 
-## The Inspiration: LaurieWired
+## ❤️ The Inspiration: LaurieWired
 
 @LaurieWired released her work as a C++ version, as it is her prior art, with her video on this model of memory management: https://www.youtube.com/watch?v=KKbgulTp3FE . Based on the vibes, I decided to soft port a version to Rust. It is very alpha at this stage. Here be dragons. You have been warned.
 
