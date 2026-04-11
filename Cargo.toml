@@ -1,27 +1,61 @@
 [package]
 name        = "ultraslayer"
-version     = "0.1.0"
+version     = "0.2.0"
 edition     = "2021"
-description = "Ultra-low latency DRAM refresh stall prevention using hardware-level hedging."
+description = "Ultra‑low latency DRAM refresh‑stall prevention using hardware‑level hedging."
+license     = "Apache-2.0"
+repository  = "https://github.com/absalomedia/ultraslayer"
+keywords    = ["hft", "low-latency", "dram", "refresh-stall", "mirroring"]
+categories  = ["algorithms", "concurrency", "memory-management"]
 
+# -----------------------------------------------------------------
+# Core runtime dependencies – always compiled
+# -----------------------------------------------------------------
 [dependencies]
 libc          = "0.2"
 core_affinity = "0.8"
 crossbeam     = "0.8"
 
+# -----------------------------------------------------------------
+# Optional dependencies – pulled in only when a feature is enabled
+# -----------------------------------------------------------------
+clap          = { version = "4", features = ["derive"], optional = true }   # CLI demo binary
+criterion     = { version = "0.5", optional = true }                     # Benchmark harness
+rand          = { version = "0.8", optional = true }                     # RNG for benchmarks
+memmap2       = { version = "0.7", optional = true }                     # Shared‑memory wrapper (optional)
+
+# -----------------------------------------------------------------
+# Feature flags
+# -----------------------------------------------------------------
+[features]
+default = []                # No optional code compiled by default
+
+# Build the C‑FFI side‑car (`src/ffi.rs`).  No extra crates beyond core ones.
+sidecar   = []
+
+# Build the demo CLI binary (`src/bin/ultraslayer.rs`).
+cli       = ["clap"]
+
+# Build the benchmark harness (Criterion + Rand) and the benchmark binary.
+benchmark = ["criterion", "rand"]
+
+# -----------------------------------------------------------------
+# Build profiles – keep the aggressive release optimisation you already
+# had, but allow a fast‑to‑compile bench profile with symbols.
+# -----------------------------------------------------------------
 [profile.release]
-lto              = true           # Full LTO — use "thin" for faster builds with near-identical perf
+lto              = true           # Full LTO – use “thin” for faster builds with near‑identical perf
 opt-level        = 3              # Aggressive speed optimisation
 panic            = "abort"        # Remove unwinding overhead for deterministic latency
 codegen-units    = 1              # Maximise inlining across the whole binary
 strip            = "symbols"      # Smaller binary, faster load
-overflow-checks  = false          # Remove integer overflow branches
-debug            = false          # Ensure no debug info bloat
+overflow-checks  = false          # Remove integer‑overflow branches
+debug            = false          # No debug info – pure release
 
 [profile.dev]
-opt-level        = 1              # Enough for dev perf without full compile times
+opt-level        = 1              # Faster dev builds
 debug            = true
 
 [profile.bench]
 inherits         = "release"
-debug            = true           # Keep symbols so perf/flamegraphs still work
+debug            = true           # Keep symbols so perf / flamegraphs still work
