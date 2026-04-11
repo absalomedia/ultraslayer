@@ -1,1 +1,55 @@
-target
+# -----------------------------------------------------------------
+# RUST / CARGO
+# -----------------------------------------------------------------
+# The target directory is where all compiled binaries and object files live.
+# It can grow to several gigabytes; NEVER commit this.
+/target/
+
+# Cargo.lock is ignored for libraries (crates) to allow consumers to 
+# resolve dependencies. It is only committed for binary-only applications.
+Cargo.lock
+
+# -----------------------------------------------------------------
+# ULTRA SLAYER SPECIFIC (Temp Files)
+# -----------------------------------------------------------------
+*.tmp
+tmp_*
+
+# Ignore any compiled side-car libraries if they are moved out of target/
+*.so
+*.dll
+*.dylib
+
+# -----------------------------------------------------------------
+# IDEs / EDITORS
+# -----------------------------------------------------------------
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# IntelliJ / CLion / RustRover
+.idea/
+
+# Vim / Emacs
+*~
+*.swp
+*.swo
+
+# -----------------------------------------------------------------
+# OPERATING SYSTEM JUNK
+# -----------------------------------------------------------------
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+.AppleDouble
+._*
+
+# Linux
+.fuse_hidden*
+.Cylix*
