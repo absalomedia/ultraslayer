@@ -168,7 +168,7 @@ Both approaches are useful: Criterion gives statistically robust confidence inte
 
 UltraSlayer is intended to be the **hot‑storage** for the most latency‑sensitive data.  Below are three common integration patterns.
 
-### A️⃣ Pure Rust Engine  
+### A️ Pure Rust Engine  
 
 ```rust
 use std::sync::Arc;
@@ -192,7 +192,7 @@ fn main() {
 
 All public methods (`read`, `write`, `slice`, `stats`, `set_spin_policy`, `pin_to_core`) are in `src/lib.rs`.
 
-### B️⃣ Non‑Rust Languages (C / Node / Python) – **Side‑car**  
+### B️ Non‑Rust Languages (C / Node / Python) – **Side‑car**  
 
 ```bash
 cargo build --release --features sidecar
