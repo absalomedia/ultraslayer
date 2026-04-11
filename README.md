@@ -1,5 +1,9 @@
 # ⚡️ UltraSlayer – DRAM Refresh‑Stall Killer  
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Crates.io](https://img.shields.io/crates/v/ultraslayer.svg)](https://crates.io/crates/ultraslayer)
+[![Follow @absalomedia](https://img.shields.io/twitter/follow/absalomedia?style=social)](https://twitter.com/absalomedia)
+
 **UltraSlayer** is a lock‑free, hardware‑aware memory slab that eliminates the “DRAM refresh stall” (tREFI) tail‑latency that destroys nanosecond‑level determinism in High‑Frequency‑Trading (HFT) and other ultra‑low‑latency workloads.  
 
 It mirrors every hot‑path object across a configurable number of physical DRAM channels and lets a dedicated **Slayer Core** race the reads in parallel, guaranteeing that at least one channel will answer before a refresh can stall the request.
