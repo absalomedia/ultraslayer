@@ -141,8 +141,6 @@ read_latency/4  time:   [61.8 ns 62.0 ns 62.2 ns]
 read_latency/8  time:   [61.6 ns 61.8 ns 62.0 ns]
 ```
 
-These numbers are **real measurements** on the host machine (no fabricated data).  You can tweak the parameters inside `benches/read_latency.rs` (size, operations, RNG seed) and re‑run.
-
 ### 2️⃣ Stand‑alone micro‑benchmark binary  
 
 ```bash
