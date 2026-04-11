@@ -229,7 +229,7 @@ lib.ul_destroy(sl)
 
 The same pattern works for Node.js (`ffi-napi`) or native C/C++.
 
-### C️⃣ Multiple Processes – **POSIX Shared‑Memory**  
+### C️ Multiple Processes – **POSIX Shared‑Memory**  
 
 ```rust
 use ultraslayer::ShmSlab;
