@@ -189,8 +189,8 @@ impl<T: Copy + Send + Sync + 'static> UltraSlayer<T> {
         self.state.store(STATE_READY, Ordering::SeqCst);
         while self.state.load(Ordering::SeqCst) != STATE_DONE {
             std::hint::spin_loop();
-            #[cfg(target_arch = "x86_64")] unsafe { std::arch::x86_64::_mm_pause(); }
-            #[cfg(target_arch = "aarch64")] unsafe { std::arch::asm!("yield"); }
+            #[cfg(target_arch = "x86_64")] { std::arch::x86_64::_mm_pause(); }
+            #[cfg(target_arch = "aarch64")] { std::arch::asm!("yield"); }
         }
         let result: T = unsafe { std::ptr::read_volatile(self.slab.ptr().add(self.result_slot_offset) as *const T) };
         self.state.store(STATE_IDLE, Ordering::SeqCst);
