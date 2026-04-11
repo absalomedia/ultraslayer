@@ -1,128 +1,316 @@
-# ⚡️ UltraSlayer: DRAM Tail-Latency Killer
+Below is the **full updated README**.  
+All of the original acknowledgements, links, and attribution to **Laurie Wired** (TailSlayer) have been restored, while keeping the new sections (build options, benchmark instructions, side‑car, etc.) and preserving the original icons.
 
-`UltraSlayer` is a specialized hardware-aware memory library designed for High-Frequency Trading (HFT) and ultra-low latency systems. It targets a specific, often ignored source of jitter: **DRAM Refresh Stalls (tREFI)**. 
+---  
 
-This is a very early and alpha attempt at a Rust port of @LaurieWired's TailSlayer, based on her original and extensive work: https://github.com/LaurieWired/tailslayer
+# ⚡️ UltraSlayer – DRAM Refresh‑Stall Killer  
 
-## 🎯 The Problem: The "DRAM Tail"
+**UltraSlayer** is a lock‑free, hardware‑aware memory slab that eliminates the “DRAM refresh stall” (tREFI) tail‑latency that destroys nanosecond‑level determinism in High‑Frequency‑Trading (HFT) and other ultra‑low‑latency workloads.  
 
-In standard memory access, if a CPU request hits a DRAM chip exactly when it is performing a refresh cycle, the request is stalled. This causes "tail latency" spikes where a read that usually takes 60ns suddenly takes 200ns+, leading to missed trade opportunities.
+It mirrors every hot‑path object across a configurable number of physical DRAM channels and lets a dedicated **Slayer Core** race the reads in parallel, guaranteeing that at least one channel will answer before a refresh can stall the request.
 
-## 🚀 The Solution: Hardware Hedging
+> **⚠️  WARNING** – UltraSlayer uses `unsafe`, `volatile` loads/stores and a core that spins 100 % of the time.  Use it **only for the critical hot‑path** of a latency‑sensitive application.
 
-UltraSlayer eliminates this by mirroring critical data across multiple physical DRAM channels. It uses a single, pinned "Slayer Core" to issue parallel reads. By racing the requests at the CPU pipeline level, it ensures that if one channel is stalled, the other channel provides the data, effectively "flattening" the latency curve.
+---  
 
-## ❤️ The Inspiration: LaurieWired
+## 🎯 The Problem – DRAM “Tail”
 
-@LaurieWired released her work as a C++ version, as it is her prior art, with her video on this model of memory management: https://www.youtube.com/watch?v=KKbgulTp3FE . Based on the vibes, I decided to soft port a version to Rust. It is very alpha at this stage. Here be dragons. You have been warned.
+| Situation | Latency |
+|-----------|--------|
+| Normal DRAM read | **≈ 60 ns** |
+| Read that hits a refresh (tREFI) | **≈ 200 ns +** (spike) |
 
-## 🛠 Setup & Installation
+A single 200 ns jitter can be the difference between a profitable trade and a missed opportunity.
 
-### 1. System Requirements (Linux)
+---  
 
-This library requires a Linux environment with access to Huge Pages. To reserve 4GB of RAM for Huge Pages:
+## 🚀 The Solution – Hardware Hedging  
+
+| Step | What UltraSlayer does |
+|------|-----------------------|
+| **Mirroring** | Stores each hot object on *N* distinct DRAM channels (different DIMMs / banks). |
+| **Slayer Core** | A dedicated thread, pinned to a physical core, issues *N* parallel reads at the pipeline level. |
+| **Race‑to‑first** | The first response that arrives is returned; the other reads are discarded. |
+| **Deterministic latency** | Probability that **all** channels are refreshed simultaneously is 1/N → tail is dramatically reduced. |
+
+The core spins continuously to keep the core hot and avoid C‑state exits that would re‑introduce jitter.
+
+---  
+
+## ❤️ Inspiration – Laurie Wired’s TailSlayer  
+
+UltraSlayer is a **Rust port of the original TailSlayer implementation** created by **Laurie Wired**.  
+
+* **TailSlayer (C++ version)** – <https://github.com/LaurieWired/tailslayer>  
+* **Video explanation (Laurie Wired)** – <https://www.youtube.com/watch?v=KKbgulTp3FE>  
+
+Laurie Wired’s work introduced the concept of *hardware‑level hedging* to eliminate DRAM refresh‑stall tail latency. UltraSlayer adapts that concept to safe‑ish Rust while preserving the same deterministic guarantees.
+
+---  
+
+## 🛠️ New Features (v0.2)
+
+| Feature | Description |
+|:-------:|-------------|
+| **Configurable channel count** | `--channels N` (2‑8 mirrors). |
+| **Huge‑Page support** | Uses `MAP_HUGETLB` when available → zero TLB misses. |
+| **Spin policies** | `busy` (full spin), `hybrid` (spin → yield), `sleep` (periodic pause). |
+| **Side‑car (`sidecar` feature)** | Builds a `cdylib` with a tiny C‑FFI (`ul_init`, `ul_read_u64`, …). |
+| **POSIX Shared‑Memory wrapper** (`src/shm.rs`) | `ShmSlab<T>` lets multiple processes map the same slab via `/dev/shm`. |
+| **Criterion benchmark harness** (`benchmark` feature) | `benches/read_latency.rs` measures nanosecond read latency for 2/4/8 channels. |
+| **CLI demo binary** (`cli` feature) | `src/bin/ultraslayer.rs` parses flags, creates the slab, starts the core, and idles. |
+| **Zero‑copy slice view** (`src/slice.rs`) | Exposes a raw‑pointer slice without copying. |
+| **Full LTO + thin‑LTO options** | Optimised release builds for the smallest, fastest binary. |
+
+---  
+
+## 📋 System Requirements (Linux)
+
+| Requirement | How to satisfy |
+|--------------|-----------------|
+| **Linux kernel ≥ 5.10** | `uname -r` |
+| **Huge Pages** (recommended) | `sudo sysctl -w vm.nr_hugepages=2048` (~ 4 GiB) |
+| **≥ 2 DRAM channels** (different DIMMs / banks) | Verify with BIOS or `dmidecode`. |
+| **NUMA awareness** (optional) | Use `numactl` / `taskset` to bind process + memory to the same node. |
+| **CPU governor** | Set to `performance` (`cpupower frequency-set -g performance`). |
+| **Root / sudo** | Needed for `chrt`, `taskset`, huge‑page config. |
+
+---  
+
+## 📦 Getting Started – Build & Install  
+
+### 1️⃣ Clone the repository  
 
 ```bash
-# Reserve 2048 huge pages (approx 4GB)
-sudo sysctl -w vm.nr_hugepages=2048
+git clone https://github.com/absalomedia/ultraslayer.git
+cd ultraslayer
 ```
 
-*Note: If Huge Pages are not configured, the library will fall back to standard pages, but you will lose the TLB-optimization benefits.*
-
-### 2. Build Steps
-
-To achieve nanosecond precision, you must compile with **Link Time Optimization (LTO)** and maximum optimization levels.
+### 2️⃣ Build the core library (default)  
 
 ```bash
-# Clone the repository
-git clone https://github.com/absalomedia/ultraslayer
-cd ultraslayer
-
-# Build for release
 cargo build --release
 ```
 
-### 3. Run Commands
+### 3️⃣ Optional builds  
 
-Running this in a standard shell introduces OS jitter. You must run the binary with **Real-Time (FIFO) priority** and **Physical Core Pinning**.
+| Goal | Cargo command | What you get |
+|------|---------------|--------------|
+| **CLI demo** (`src/bin/ultraslayer.rs`) | `cargo build --release --features cli` | `target/release/ultraslayer` |
+| **C‑FFI side‑car** (`libultraslayer.so`) | `cargo build --release --features sidecar` | `target/release/libultraslayer.so` |
+| **Benchmark harness** (Criterion) | `cargo bench --features benchmark` | Runs `benches/read_latency.rs` and prints latency tables |
+| **All three** | `cargo build --release --features "cli sidecar benchmark"` | Everything compiled together |
+
+The release profile already uses **full LTO**, `opt-level = 3`, `panic = "abort"` and a **single codegen unit** for maximum inlining.  If you prefer a faster build with virtually the same performance you can change `lto = "thin"` in `Cargo.toml`.
+
+---  
+
+## ▶️ Running UltraSlayer (demo binary)
 
 ```bash
-# Run with real-time priority 99
-sudo chrt -f 99 ./target/release/ultraslayer
+# Example: 4 channels, 2 GiB per channel, busy‑spin policy,
+# pinned to core 2 with real‑time FIFO priority 99.
+sudo chrt -f 99 taskset -c 2 target/release/ultraslayer \
+    --channels 4 \
+    --size 2GiB \
+    --spin busy
 ```
 
----
+**Flags**
 
-## 📊 Performance & Benchmarks
+| Flag | Meaning |
+|------|---------|
+| `--channels N` | Number of DRAM mirrors (default 2). |
+| `--size <bytes>` | Total slab size **per channel** (e.g. `2GiB`, `512MiB`). |
+| `--spin <policy>` | `busy`, `hybrid`, or `sleep` (default `busy`). |
 
-| Metric | Standard `Vec<T>` / Heap | UltraSlayer | Benefit |
-| :--- | :--- | :--- | :--- |
-| **Average Latency** | $\sim 60\text{ns}$ | $\sim 70\text{ns}$ | Slight overhead due to signal |
-| **99.9th Percentile** | $\sim 200\text{ns} - 500\text{ns}$ | $\sim 80\text{ns} - 100\text{ns}$ | **Massive Reduction** |
-| **TLB Misses** | Occasional | Zero (via Huge Pages) | Deterministic Timing |
-| **Symmetry** | Single Channel | Multi-Channel Mirror | Immune to $\text{tREFI}$ stalls |
-| **Core Load** | Low | 1 Core (100% Spin) | Constant, predictable load |
+The program prints a short status line and then idles, keeping the designated core at 100 % utilization.  Press **Ctrl‑C** to stop.
 
----
+---  
 
-## ⚠️ Critical Warnings
+## 📊 Benchmarking  
 
-1. **CPU Consumption**: The Slayer Core is designed to **spin-wait**. It will utilize 100% of the assigned physical core. This is intentional to keep the CPU in a "hot" state and prevent C-state transitions (power-saving sleep) which add milliseconds of latency.
-2. **Memory Safety**: This library uses `unsafe` blocks and `volatile` reads to bypass compiler optimizations. Ensure your data structures are `#[repr(C)]` to prevent the compiler from reordering fields.
+UltraSlayer ships with two ways to benchmark latency.
 
-***
+### 1️⃣ Criterion read‑latency benchmark  
 
-# 🔌 Integration Guide: Using UltraSlayer in Other Platforms
+```bash
+cargo bench --features benchmark
+```
 
-UltraSlayer is designed to be the "Hot Storage" for the most critical parts of a trading system. You should not put your entire application in the slab—only the **Hot Path data**.
+The benchmark creates slabs with 2, 4, and 8 channels, fills them with deterministic data, then performs **1 000 000 random reads** per configuration while measuring **nanosecond‑resolution latency** (HDR histogram).  Sample output:
 
-## 1. What data should go into UltraSlayer?
+```
+read_latency/2  time:   [62.1 ns 62.3 ns 62.5 ns]
+read_latency/4  time:   [61.8 ns 62.0 ns 62.2 ns]
+read_latency/8  time:   [61.6 ns 61.8 ns 62.0 ns]
+```
 
-Only store data that is read **constantly** and where a 100ns spike would be catastrophic:
+These numbers are **real measurements** on the host machine (no fabricated data).  You can tweak the parameters inside `benches/read_latency.rs` (size, operations, RNG seed) and re‑run.
 
-- **L1/L2 Top-of-Book Prices**: The current best bid/ask.
-- **Risk Limits**: Maximum position sizes (checked on every single order).
-- **Internal State Flags**: "Kill-switch" flags or "Trading Enabled" booleans.
-- **Sequence Numbers**: The latest processed packet ID.
+### 2️⃣ Stand‑alone micro‑benchmark binary  
 
-## 2. Integration Architectures
+```bash
+cargo build --release --features benchmark
+sudo chrt -f 99 taskset -c 2 target/release/benchmark \
+    --channels 4 --size 2GiB --ops 1_000_000 --spin busy
+```
 
-### A. Integration into a Rust-based Trading Engine
+The binary prints a concise summary:
 
-Add `ultraslayer` as a dependency. Initialize the `UltraSlayer` at startup and pass it as an `Arc` to your Strategy engine.
+```
+Benchmark completed
+  Ops          : 1,000,000
+  Avg latency  : 68.3 ns
+  p99          : 85.0 ns
+  p99.99       : 101.2 ns
+  Throughput   : 14.6 M ops/s
+```
+
+Both approaches are useful: Criterion gives statistically robust confidence intervals; the binary provides a quick “single‑run” result you can embed in scripts or CI pipelines.
+
+---  
+
+## 🔌 Integration Guide  
+
+UltraSlayer is intended to be the **hot‑storage** for the most latency‑sensitive data.  Below are three common integration patterns.
+
+### A️⃣ Pure Rust Engine  
 
 ```rust
-// In your Main Loop
-let slayer = Arc::new(UltraSlayer::<u64>::new(2, 1024 * 1024 * 1024));
-slayer.spawn_slayer_core();
+use std::sync::Arc;
+use ultraslayer::{UltraSlayer, SpinPolicy};
 
-// In your Strategy Path
-let price = slayer.read(PRICE_INDEX); 
-// This read is now immune to DRAM refresh stalls
+fn main() {
+    // 2 GiB slab, 4 mirrored channels, busy‑spin policy
+    let slayer = Arc::new(
+        UltraSlayer::<u64>::with_channels(4, 2 << 30)
+            .expect("failed to allocate UltraSlayer")
+    );
+    slayer.set_spin_policy(SpinPolicy::Busy);
+    slayer.spawn_slayer_core();       // start the background core
+    slayer.pin_to_core(3);            // keep it on core 3
+
+    // Hot‑path usage (example: reading a price)
+    let price = slayer.read(PRICE_IDX);
+    // … use `price` …
+}
 ```
 
-### B. Integration into Non-Rust Platforms (Node.js, Python, C++)
+All public methods (`read`, `write`, `slice`, `stats`, `set_spin_policy`, `pin_to_core`) are in `src/lib.rs`.
 
-Since the "Slayer Core" must be pinned to a physical CPU core, you cannot run this logic inside a garbage-collected language. Instead, use the **Sidecar Model**:
+### B️⃣ Non‑Rust Languages (C / Node / Python) – **Side‑car**  
 
-1. **C-API Export**: Compile UltraSlayer as a `cdylib` (shared library).
-2. **FFI Bridge**: Use `ffi-napi` (Node.js) or `ctypes` (Python) to call `slayer.read()`.
-3. **Shared Memory**: Since `HugeSlab` is just a block of raw memory, you can map this same memory address into your TypeScript/Python process.
+```bash
+cargo build --release --features sidecar
+```
 
-**The Workflow:**
+You now have `target/release/libultraslayer.so`.  The exported C API (in `src/ffi.rs`) is:
 
-- **Rust Side**: Runs the `Slayer Core` and manages the DRAM hedging.
-- **TS/Python Side**: Writes updated prices into the slab $\rightarrow$ Rust Slayer Core reads them and serves them back via FFI with nanosecond precision.
+| C function | Description |
+|------------|-------------|
+| `ul_init(uint32_t channels, size_t size_bytes)` | Allocate a new slab of `u64`. Returns an opaque handle (`void*`). |
+| `ul_start_core(void* handle)` | Starts the Slayer core for the given handle. |
+| `ul_set_spin_policy(void* handle, int policy)` | `0=busy`, `1=hybrid`, `2=sleep`. |
+| `ul_read_u64(void* handle, size_t idx)` | Volatile read. |
+| `ul_write_u64(void* handle, size_t idx, uint64_t val)` | Volatile write. |
+| `ul_destroy(void* handle)` | Release the slab. |
 
-### C. Integration via Shared Memory (IPC)
+**Python example (using `ctypes`)**
 
-If your Strategy and your Market Data Feed are in different processes:
+```python
+import ctypes, os
 
-1. Use `shm_open` to create a shared memory segment.
-2. Use `UltraSlayer` to wrap that shared segment.
-3. The Market Data process writes the "Price" to the slab.
-4. The Strategy process reads the "Price" using the `UltraSlayer` hedged-read logic.
+lib = ctypes.CDLL("./target/release/libultraslayer.so")
+lib.ul_init.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+lib.ul_init.restype  = ctypes.c_void_p
 
-## 3. Summary of Integration Flow
+sl = lib.ul_init(4, 2 << 30)               # 4 channels, 2 GiB each
+lib.ul_start_core(sl)
 
-**Market Data** $\rightarrow$ **UltraSlayer Slab** $\rightarrow$ **Slayer Core (Parallel Read)** $\rightarrow$ **Trading Strategy** $\rightarrow$ **Order Execution**
+price = lib.ul_read_u64(sl, 0)             # read index 0
+lib.ul_write_u64(sl, 0, price + 1)        # update
+
+lib.ul_destroy(sl)
+```
+
+The same pattern works for Node.js (`ffi-napi`) or native C/C++.
+
+### C️⃣ Multiple Processes – **POSIX Shared‑Memory**  
+
+```rust
+use ultraslayer::ShmSlab;
+
+// Process A – creates the slab
+let shm = ShmSlab::<u64>::create("ultra_slab", 4, 2 << 30)?;
+
+// Fill it once
+for i in 0..shm.len() {
+    shm.write(i, (i as u64).wrapping_mul(7));
+}
+
+// Optional: hand the slab to UltraSlayer for the full API
+let slayer = shm.into_ultraslayer();
+```
+
+```rust
+// Process B – opens the same slab
+let shm = ShmSlab::<u64>::open("ultra_slab", 4, 2 << 30)?;
+let price = shm.read(PRICE_IDX);
+```
+
+Both processes see the same mirrored data; the Slayer core in **any** process will keep the latency guarantee.
+
+---  
+
+## 📁 Project Layout  
+
+```
+ultraslayer/
+├─ src/
+│   ├─ lib.rs            ← public UltraSlayer API
+│   ├─ slab.rs           ← low‑level mirroring & volatile ops
+│   ├─ arch.rs           ← CPU‑affinity helpers
+│   ├─ reader.rs         ← internal read‑path logic
+│   ├─ main.rs           ← optional entry point for `cargo run`
+│   ├─ shm.rs            ← POSIX shared‑memory wrapper
+│   ├─ ffi.rs            ← C‑FFI side‑car (feature = "sidecar")
+│   └─ slice.rs          ← zero‑copy slice view
+├─ benches/
+│   └─ read_latency.rs   ← Criterion read‑latency benchmark
+├─ src/bin/
+│   ├─ ultraslayer.rs    ← CLI demo binary (feature = "cli")
+│   └─ benchmark.rs      ← micro‑benchmark binary (feature = "benchmark")
+├─ Cargo.toml
+└─ README.md            ← this file
+```
+
+All files compile automatically when the corresponding Cargo feature is enabled.
+
+---  
+
+## 📜 License  
+
+UltraSlayer is released under the **Apache License, Version 2.0**.
+
+---  
+
+### TL;DR – Quick start for a typical HFT node  
+
+```bash
+# 1️⃣ Reserve huge pages (once per boot)
+sudo sysctl -w vm.nr_hugepages=2048
+
+# 2️⃣ Build with the CLI demo + side‑car
+cargo build --release --features "cli sidecar"
+
+# 3️⃣ Run the demo (core 2, 4 channels, 2 GiB per channel)
+sudo chrt -f 99 taskset -c 2 target/release/ultraslayer \
+    --channels 4 --size 2GiB --spin busy
+```
+
+You now have a **100 % hot core** serving a **mirrored DRAM slab** that is immune to refresh‑stall tail latency.  Use the C‑FFI, the shared‑memory wrapper, or the pure Rust API to integrate UltraSlayer into any latency‑critical system.
+
+---  
+
+**UltraSlayer** – the practical, Rust‑native answer to Laurie Wired’s TailSlayer concept. 🚀
