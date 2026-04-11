@@ -58,7 +58,7 @@ Laurie Wired’s work introduced the concept of *hardware‑level hedging* to 
 | **Side‑car (`sidecar` feature)** | Builds a `cdylib` with a tiny C‑FFI (`ul_init`, `ul_read_u64`, …). |
 | **POSIX Shared‑Memory wrapper** (`src/shm.rs`) | `ShmSlab<T>` lets multiple processes map the same slab via `/dev/shm` (Linux only). |
 | **Criterion benchmark harness** (`benchmark` feature) | `benches/read_latency.rs` measures nanosecond read latency for 2/4/8 channels. |
-| **CLI demo binary** (`cli` feature) | `src/bin/ultraslayer_cli.rs` parses flags, creates the slab, starts the core, and idles. |
+| **CLI demo binary** (`cli` feature) | `examples/ultraslayer_cli.rs` parses flags, creates the slab, starts the core, and idles. |
 | **Zero‑copy slice view** (`slice` feature) | `src/slice.rs` exposes a raw‑pointer slice for bulk reads without copying. |
 | **Full LTO + thin‑LTO options** | Optimised release builds for the smallest, fastest binary. |
 
