@@ -6,6 +6,10 @@ It mirrors every hot‑path object across a configurable number of physical DRAM
 
 > **⚠️  WARNING** – UltraSlayer uses `unsafe`, `volatile` loads/stores and a core that spins 100 % of the time.  Use it **only for the critical hot‑path** of a latency‑sensitive application.
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Crates.io](https://img.shields.io/crates/v/ultraslayer.svg)](https://crates.io/crates/ultraslayer)
+[![Follow @absalomedia](https://img.shields.io/twitter/follow/absalomedia?style=social)](https://twitter.com/absalomedia)
+
 ---  
 
 ## 🎯 The Problem – DRAM “Tail”
