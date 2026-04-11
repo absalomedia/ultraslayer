@@ -53,8 +53,8 @@ Laurie Wired’s work introduced the concept of *hardware‑level hedging* to 
 | **Side‑car (`sidecar` feature)** | Builds a `cdylib` with a tiny C‑FFI (`ul_init`, `ul_read_u64`, …). |
 | **POSIX Shared‑Memory wrapper** (`src/shm.rs`) | `ShmSlab<T>` lets multiple processes map the same slab via `/dev/shm`. |
 | **Criterion benchmark harness** (`benchmark` feature) | `benches/read_latency.rs` measures nanosecond read latency for 2/4/8 channels. |
-| **CLI demo binary** (`cli` feature) | `src/bin/ultraslayer.rs` parses flags, creates the slab, starts the core, and idles. |
-| **Zero‑copy slice view** (`src/slice.rs`) | Exposes a raw‑pointer slice without copying. |
+| **CLI demo binary** (`cli` feature) | `src/bin/ultraslayer_cli.rs` parses flags, creates the slab, starts the core, and idles. |
+| **Zero‑copy slice view** (`slice` feature) | `src/slice.rs` exposes a raw‑pointer slice for bulk reads without copying. |
 | **Full LTO + thin‑LTO options** | Optimised release builds for the smallest, fastest binary. |
 
 ---  
@@ -91,10 +91,11 @@ cargo build --release
 
 | Goal | Cargo command | What you get |
 |------|---------------|--------------|
-| **CLI demo** (`src/bin/ultraslayer.rs`) | `cargo build --release --features cli` | `target/release/ultraslayer` |
+| **CLI demo** (`src/bin/ultraslayer_cli.rs`) | `cargo build --release --features cli` | `target/release/ultraslayer_cli` |
 | **C‑FFI side‑car** (`libultraslayer.so`) | `cargo build --release --features sidecar` | `target/release/libultraslayer.so` |
+| **Zero‑copy slices** (`src/slice.rs`) | `cargo build --release --features slice` | Enables the `.slice()` API in `UltraSlayer` |
 | **Benchmark harness** (Criterion) | `cargo bench --features benchmark` | Runs `benches/read_latency.rs` and prints latency tables |
-| **All three** | `cargo build --release --features "cli sidecar benchmark"` | Everything compiled together |
+| **All features** | `cargo build --release --features "cli sidecar slice benchmark"` | Everything compiled together |
 
 The release profile already uses **full LTO**, `opt-level = 3`, `panic = "abort"` and a **single codegen unit** for maximum inlining.  If you prefer a faster build with virtually the same performance you can change `lto = "thin"` in `Cargo.toml`.
 
@@ -105,7 +106,7 @@ The release profile already uses **full LTO**, `opt-level = 3`, `panic = "abort"
 ```bash
 # Example: 4 channels, 2 GiB per channel, busy‑spin policy,
 # pinned to core 2 with real‑time FIFO priority 99.
-sudo chrt -f 99 taskset -c 2 target/release/ultraslayer \
+sudo chrt -f 99 taskset -c 2 target/release/ultraslayer_cli \
     --channels 4 \
     --size 2GiB \
     --spin busy
@@ -160,8 +161,6 @@ Benchmark completed
   Throughput   : 14.6 M ops/s
 ```
 
-Both approaches are useful: Criterion gives statistically robust confidence intervals; the binary provides a quick “single‑run” result you can embed in scripts or CI pipelines.
-
 ---  
 
 ## 🔌 Integration Guide  
@@ -186,7 +185,10 @@ fn main() {
 
     // Hot‑path usage (example: reading a price)
     let price = slayer.read(PRICE_IDX);
-    // … use `price` …
+    
+    // Optional: Bulk read via slice (requires --features slice)
+    // let view = unsafe { slayer.slice() };
+    // let first_val = view[0];
 }
 ```
 
@@ -209,26 +211,6 @@ You now have `target/release/libultraslayer.so`.  The exported C API (in `src/ff
 | `ul_write_u64(void* handle, size_t idx, uint64_t val)` | Volatile write. |
 | `ul_destroy(void* handle)` | Release the slab. |
 
-**Python example (using `ctypes`)**
-
-```python
-import ctypes, os
-
-lib = ctypes.CDLL("./target/release/libultraslayer.so")
-lib.ul_init.argtypes = [ctypes.c_uint, ctypes.c_size_t]
-lib.ul_init.restype  = ctypes.c_void_p
-
-sl = lib.ul_init(4, 2 << 30)               # 4 channels, 2 GiB each
-lib.ul_start_core(sl)
-
-price = lib.ul_read_u64(sl, 0)             # read index 0
-lib.ul_write_u64(sl, 0, price + 1)        # update
-
-lib.ul_destroy(sl)
-```
-
-The same pattern works for Node.js (`ffi-napi`) or native C/C++.
-
 ### C️ Multiple Processes – **POSIX Shared‑Memory**  
 
 ```rust
@@ -245,14 +227,6 @@ for i in 0..shm.len() {
 // Optional: hand the slab to UltraSlayer for the full API
 let slayer = shm.into_ultraslayer();
 ```
-
-```rust
-// Process B – opens the same slab
-let shm = ShmSlab::<u64>::open("ultra_slab", 4, 2 << 30)?;
-let price = shm.read(PRICE_IDX);
-```
-
-Both processes see the same mirrored data; the Slayer core in **any** process will keep the latency guarantee.
 
 ---  
 
@@ -272,13 +246,11 @@ ultraslayer/
 ├─ benches/
 │   └─ read_latency.rs   ← Criterion read‑latency benchmark
 ├─ src/bin/
-│   ├─ ultraslayer.rs    ← CLI demo binary (feature = "cli")
+│   ├─ ultraslayer_cli.rs    ← CLI demo binary (feature = "cli")
 │   └─ benchmark.rs      ← micro‑benchmark binary (feature = "benchmark")
 ├─ Cargo.toml
 └─ README.md            ← this file
 ```
-
-All files compile automatically when the corresponding Cargo feature is enabled.
 
 ---  
 
@@ -294,16 +266,12 @@ UltraSlayer is released under the **Apache License, Version 2.0**.
 # 1️⃣ Reserve huge pages (once per boot)
 sudo sysctl -w vm.nr_hugepages=2048
 
-# 2️⃣ Build with the CLI demo + side‑car
-cargo build --release --features "cli sidecar"
+# 2️⃣ Build with the CLI demo + side‑car + slice view
+cargo build --release --features "cli sidecar slice"
 
 # 3️⃣ Run the demo (core 2, 4 channels, 2 GiB per channel)
-sudo chrt -f 99 taskset -c 2 target/release/ultraslayer \
+sudo chrt -f 99 taskset -c 2 target/release/ultraslayer_cli \
     --channels 4 --size 2GiB --spin busy
 ```
-
-You now have a **100 % hot core** serving a **mirrored DRAM slab** that is immune to refresh‑stall tail latency.  Use the C‑FFI, the shared‑memory wrapper, or the pure Rust API to integrate UltraSlayer into any latency‑critical system.
-
----  
 
 **UltraSlayer** – the practical, Rust‑native answer to Laurie Wired’s TailSlayer concept. 🚀

@@ -9,37 +9,27 @@
 
 #[cfg(feature = "sidecar")]
 mod ffi {
-    use std::os::raw::{c_char, c_int, c_ulong, c_uint, c_void};
-    use std::ffi::CStr;
-    use std::ptr::null_mut;
+    use std::os::raw::{c_int, c_ulong, c_uint};
     use std::sync::Arc;
+    use crate::reader::{UltraSlayer, SpinPolicy};
 
-    use crate::slab::{UltraSlayer, SpinPolicy};
-
-    // We store the UltraSlayer inside an `Arc` so that the C code can hold a
-    // raw pointer (`*mut UltraSlayer<u64>`) without worrying about ownership.
-    // The pointer returned from `ul_init` is later handed back to `Box::from_raw`
-    // inside `ul_destroy`.
-    type Handle = Arc<UltraSlayer<u64>>;
+    // We define Handle as the raw pointer to the Arc.
+    // This is what we pass back and forth to the C side.
+    type Handle = UltraSlayer<u64>;
 
     #[no_mangle]
-    pub extern "C" fn ul_init(
-        channels: c_uint,
-        size_bytes: c_ulong,
-    ) -> *mut Handle {
-        // Safety: the caller must ensure `size_bytes` > 0 and divisible by
-        // `size_of::<u64>()`.  If the request is bogus we simply return null.
+    pub extern "C" fn ul_init(channels: c_uint, size_bytes: c_ulong) -> *mut Handle {
+        let channels = channels as usize;
+        let size_bytes = size_bytes as usize;
+        
         if size_bytes == 0 || size_bytes % std::mem::size_of::<u64>() != 0 {
-            return null_mut();
+            return std::ptr::null_mut();
         }
 
-        // Create the slab (no shared memory – just a normal allocation for the
-        // sidecar use‑case).  Errors are turned into null pointers.
-        let sl = match UltraSlayer::<u64>::with_channels(channels as usize, size_bytes as usize) {
-            Ok(s) => s,
-            Err(_) => return null_mut(),
-        };
+        // UltraSlayer::new returns the object directly, not a Result.
+        let sl = UltraSlayer::<u64>::new(channels, size_bytes);
 
+        // Convert Arc to raw pointer to pass to C.
         Arc::into_raw(Arc::new(sl)) as *mut Handle
     }
 
@@ -48,9 +38,9 @@ mod ffi {
         if handle.is_null() {
             return -1;
         }
-        // SAFETY: we are guaranteed that the pointer came from `Arc::into_raw`.
-        let sl = unsafe { &*(*handle) };
-        sl.spawn_slayer_core();
+        // SAFETY: Recover reference from the raw pointer.
+        let sl = unsafe { &*handle };
+        sl.spawn_slayer_core(0);
         0
     }
 
@@ -59,7 +49,7 @@ mod ffi {
         if handle.is_null() {
             return -1;
         }
-        let sl = unsafe { &*(*handle) };
+        let sl = unsafe { &*handle };
         let sp = match policy {
             0 => SpinPolicy::Busy,
             1 => SpinPolicy::HybridYield,
@@ -75,7 +65,7 @@ mod ffi {
         if handle.is_null() {
             return 0;
         }
-        let sl = unsafe { &*(*handle) };
+        let sl = unsafe { &*handle };
         sl.read(idx as usize) as c_ulong
     }
 
@@ -84,18 +74,17 @@ mod ffi {
         if handle.is_null() {
             return;
         }
-        let sl = unsafe { &*(*handle) };
-        sl.write(idx as usize, val as u64);
+        let sl = unsafe { &*handle };
+        sl.insert(idx as usize, val as u64);
     }
 
     #[no_mangle]
     pub extern "C" fn ul_destroy(handle: *mut Handle) {
-        if handle.is_null() {
-            return;
-        }
-        // Re‑create the Arc so it gets dropped automatically.
-        unsafe {
-            Arc::from_raw(*handle);
+        if !handle.is_null() {
+            // SAFETY: Reconstruct the Arc to let it drop and free the memory.
+            unsafe {
+                let _ = Arc::from_raw(handle);
+            }
         }
     }
 }

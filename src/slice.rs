@@ -117,37 +117,24 @@ impl<'a, T> Slice<'a, T> {
     }
 }
 
-/* -----------------------------------------------------------------
- *  Deref / DerefMut implementations – convenient slice syntax.
- * ----------------------------------------------------------------- */
 impl<'a, T> Deref for Slice<'a, T> {
     type Target = [T];
 
-    /// Returns an immutable slice.  SAFETY: See `as_slice`.
     #[inline]
     fn deref(&self) -> &[T] {
-        // SAFETY: `Slice::as_slice` documents the required guarantees.
         unsafe { self.as_slice() }
     }
 }
 
 impl<'a, T> DerefMut for Slice<'a, T> {
-    /// Returns a mutable slice.  SAFETY: See `as_mut_slice`.
     #[inline]
     fn deref_mut(&mut self) -> &mut [T] {
-        // SAFETY: `Slice::as_mut_slice` documents the required guarantees.
         unsafe { self.as_mut_slice() }
     }
 }
 
-/* -----------------------------------------------------------------
- *  Debug implementation – helpful when printing a Slice.
- * ----------------------------------------------------------------- */
 impl<'a, T: std::fmt::Debug> std::fmt::Debug for Slice<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // We deliberately show the underlying slice for debugging.
-        // SAFETY: Just reading for Debug is okay as long as the caller
-        // respects the general aliasing contract.
         unsafe { f.debug_struct("Slice")
                   .field("ptr", &self.as_ptr())
                   .field("len", &self.len)
@@ -156,38 +143,11 @@ impl<'a, T: std::fmt::Debug> std::fmt::Debug for Slice<'a, T> {
     }
 }
 
-/* -----------------------------------------------------------------
- *  Equality – compare contents element‑wise.
- * ----------------------------------------------------------------- */
 impl<'a, T: PartialEq> PartialEq for Slice<'a, T> {
     fn eq(&self, other: &Self) -> bool {
-        // SAFETY: read‑only comparison obeys the same rules as `as_slice`.
         unsafe { self.as_slice() == other.as_slice() }
     }
 }
 
 impl<'a, T: Eq> Eq for Slice<'a, T> {}
 
-/// Example usage (shown in docs).  This is not compiled as part of the
-/// library unless the `example` cfg flag is enabled, but it serves as a
-/// quick reference for downstream users.
-///
-/// ```
-/// # use ultraslayer::UltraSlayer;
-/// # use ultraslayer::Slice;
-/// # fn demo() -> ultraslayer::Result<()> {
-/// let sl = UltraSlayer::<u64>::with_channels(2, 64)?;
-/// // Write some data...
-/// for i in 0..sl.len() {
-///     sl.write(i, i as u64 * 7);
-/// }
-///
-/// // Create a zero‑copy view over the whole slab:
-/// let view: Slice<'_, u64> = unsafe { Slice::from_raw_parts(sl.ptr(), sl.len()) };
-///
-/// // Read the view safely (the slab is not being written concurrently)
-/// let sum: u64 = unsafe { view.as_slice().iter().sum() };
-/// println!("sum = {}", sum);
-/// # Ok(())
-/// # }
-/// ```

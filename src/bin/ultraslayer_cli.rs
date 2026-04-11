@@ -1,13 +1,11 @@
-//! src/bin/ultraslayer.rs
+//! src/bin/ultraslayer_cli.rs
 //!
 //! A tiny command‑line driver that mirrors the usage shown in the README.
 //! It parses a few flags (`--channels`, `--size`, `--spin`), creates the
 //! slab, starts the background core, and then just idles until the user
-//! hits Ctrl‑C.  The program prints a short status line so you can see that
-//! the core is alive and the slab is usable.
+//! hits Ctrl‑C.
 
 use std::process;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -49,8 +47,7 @@ fn parse_size(s: &str) -> Result<usize, String> {
 
 fn main() {
     // -------------------------------------------------------------
-    // CLI parsing – uses `clap` (add `clap = { version = "4", features = ["derive"] }`
-    // to your Cargo.toml).
+    // CLI parsing – updated for clap v4
     // -------------------------------------------------------------
     let matches = Command::new("ultraslayer")
         .about("Demo binary for the UltraSlayer memory slab")
@@ -79,15 +76,20 @@ fn main() {
         )
         .get_matches();
 
+    // In clap v4, value_of is replaced by get_one::<String>()
     let channels: usize = matches
-        .value_of_t("channels")
+        .get_one::<String>("channels")
+        .unwrap()
+        .parse()
         .expect("failed to parse channels");
-    let size_str = matches.value_of("size").unwrap(); // required
+
+    let size_str = matches.get_one::<String>("size").unwrap(); 
     let size_bytes = parse_size(size_str).unwrap_or_else(|e| {
         eprintln!("Error parsing --size: {}", e);
         process::exit(1);
     });
-    let spin_policy = match matches.value_of("spin").unwrap() {
+
+    let spin_policy = match matches.get_one::<String>("spin").unwrap().as_str() {
         "busy" => SpinPolicy::Busy,
         "hybrid" => SpinPolicy::HybridYield,
         "sleep" => SpinPolicy::Sleep,
@@ -100,10 +102,14 @@ fn main() {
     // -------------------------------------------------------------
     // Create the slab.
     // -------------------------------------------------------------
-    let slayer = UltraSlayer::<u64>::with_channels(channels, size_bytes)
-        .expect("Failed to allocate UltraSlayer slab");
+    // Fixed: Using .new() instead of .with_channels()
+    let slayer = UltraSlayer::<u64>::new(channels, size_bytes);
+    
     slayer.set_spin_policy(spin_policy);
-    slayer.spawn_slayer_core();
+    
+    // The slayer core needs a CPU ID to pin to. 
+    // We use core 0 by default for the demo.
+    slayer.spawn_slayer_core(0);
 
     // -------------------------------------------------------------
     // Print a tiny status line so the user knows it is alive.

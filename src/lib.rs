@@ -21,26 +21,24 @@ pub mod reader;
 
 /// Re‑export the most‑used items so downstream crates can write
 /// `use ultraslayer::{UltraSlayer, HugeSlab, ArchConfig, SpinPolicy};`
-pub use arch::ArchConfig;
 pub use reader::{SpinPolicy, UltraSlayer};
 pub use slab::HugeSlab;
+pub use arch::ArchConfig;
 
-/// Optional zero‑copy slice view – always available.
+// Optional: Zero-copy slice view
+#[cfg(feature = "slice")]
 pub mod slice;
+#[cfg(feature = "slice")]
 pub use slice::Slice;
 
-/// Optional shared‑memory wrapper (POSIX `shm_open` + `mmap`).
-#[cfg(feature = "shm")]
+// Optional: Shared-memory wrapper (Linux only)
+#[cfg(all(feature = "shm", unix))]
 pub mod shm;
-
-#[cfg(feature = "shm")]
+#[cfg(all(feature = "shm", unix))]
 pub use shm::ShmSlab;
 
-/// Optional C‑FFI side‑car.  It is compiled only when the `sidecar` feature is
-/// enabled, so crates that don’t need a C API won’t pull in the extra build
-/// dependencies.
+// Optional: C-FFI side-car
 #[cfg(feature = "sidecar")]
 pub mod ffi;
-
 #[cfg(feature = "sidecar")]
 pub use ffi::*;
