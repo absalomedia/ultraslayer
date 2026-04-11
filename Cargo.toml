@@ -34,7 +34,7 @@ default = []                # No optional code compiled by default
 # Build the C‑FFI side‑car (`src/ffi.rs`).
 sidecar   = []
 
-# Build the demo CLI binary (`src/bin/ultraslayer_cli.rs`).
+# Build the demo CLI binary (`examples/ultraslayer_cli.rs`).
 cli       = ["clap"]
 
 # Build the benchmark harness (Criterion + Rand).

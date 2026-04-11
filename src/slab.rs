@@ -38,7 +38,7 @@ impl HugeSlab {
         {
             // memmap2::MmapOptions::new().map_anon() is already marked as unsafe.
             // We just call it directly.
-            let mmap = unsafe {
+            let mmap = {
                 memmap2::MmapOptions::new()
                     .len(size)
                     .map_anon()

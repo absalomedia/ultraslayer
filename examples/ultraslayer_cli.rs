@@ -1,4 +1,4 @@
-//! src/bin/ultraslayer_cli.rs
+//! examples/ultraslayer_cli.rs
 //!
 //! A tiny command‑line driver that mirrors the usage shown in the README.
 //! It parses a few flags (`--channels`, `--size`, `--spin`), creates the

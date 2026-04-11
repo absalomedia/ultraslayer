@@ -50,6 +50,7 @@ pub struct UltraSlayer<T> {
     config: ArchConfig,
     elem_size: usize,
     seqlock: Arc<SeqLock>,
+    #[allow(dead_code)]
     capacity: usize,
     _marker: PhantomData<T>,
     total_reads: Arc<AtomicUsize>,
@@ -140,8 +141,8 @@ impl<T: Copy + Send + Sync + 'static> UltraSlayer<T> {
                     match policy {
                         0 => { 
                             std::hint::spin_loop();
-                            #[cfg(target_arch = "x86_64")] unsafe { std::arch::x86_64::_mm_pause(); }
-                            #[cfg(target_arch = "aarch64")] unsafe { std::arch::asm!("yield"); }
+                            #[cfg(target_arch = "x86_64")] { std::arch::x86_64::_mm_pause(); }
+                            #[cfg(target_arch = "aarch64")] { std::arch::asm!("yield"); }
                         },
                         1 => { for _ in 0..100 { std::hint::spin_loop(); } std::thread::yield_now(); },
                         _ => { std::thread::sleep(std::time::Duration::from_micros(10)); }
