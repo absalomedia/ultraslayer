@@ -1,8 +1,3 @@
-Below is the **full updated README**.  
-All of the original acknowledgements, links, and attribution to **Laurie Wired** (TailSlayer) have been restored, while keeping the new sections (build options, benchmark instructions, side‑car, etc.) and preserving the original icons.
-
----  
-
 # ⚡️ UltraSlayer – DRAM Refresh‑Stall Killer  
 
 **UltraSlayer** is a lock‑free, hardware‑aware memory slab that eliminates the “DRAM refresh stall” (tREFI) tail‑latency that destroys nanosecond‑level determinism in High‑Frequency‑Trading (HFT) and other ultra‑low‑latency workloads.  
