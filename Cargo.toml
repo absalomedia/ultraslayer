@@ -1,6 +1,6 @@
 [package]
 name        = "ultraslayer"
-version     = "0.2.1"
+version     = "0.2.2"
 edition     = "2021"
 description = "Ultra‑low latency DRAM refresh‑stall prevention using hardware‑level hedging."
 license     = "Apache-2.0"
