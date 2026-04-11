@@ -1,0 +1,83 @@
+//! benches/read_latency.rs
+//!
+//! Runs a straightforward “read‑only” latency benchmark using
+//! `criterion`.  The benchmark is part of the public README (the
+//! “read_latency” table).  It creates an `UltraSlayer<u64>` slab with a
+//! configurable number of channels and size, fills it with deterministic data,
+//! then performs a large number of random reads while measuring the
+//! nanosecond cost of each read.
+
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, black_box};
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
+
+use ultraslayer::{UltraSlayer, SpinPolicy};
+
+fn read_latency_bench(c: &mut Criterion) {
+    // -----------------------------------------------------------------
+    // Benchmark parameters – you can adjust them locally if you want.
+    // -----------------------------------------------------------------
+    let size_bytes = 2usize << 30; // 2 GiB total slab (per channel)
+    let num_channels = [2usize, 4usize, 8usize];
+    let ops_per_run = 1_000_000usize;
+
+    // -----------------------------------------------------------------
+    // For reproducibility we use a fixed RNG seed.
+    // -----------------------------------------------------------------
+    let mut rng = StdRng::seed_from_u64(0xdead_beef_cafe_babe);
+
+    // -----------------------------------------------------------------
+    // Create a group so we can report multiple configurations.
+    // -----------------------------------------------------------------
+    let mut group = c.benchmark_group("read_latency");
+    group.sample_size(100); // more samples → tighter confidence interval
+    group.throughput(criterion::Throughput::Elements(ops_per_run as u64));
+
+    for &channels in &num_channels {
+        // -------------------------------------------------------------
+        // Allocate the slab and pre‑fill it with deterministic values.
+        // -------------------------------------------------------------
+        let slayer = UltraSlayer::<u64>::with_channels(channels, size_bytes)
+            .expect("failed to allocate UltraSlayer");
+        slayer.set_spin_policy(SpinPolicy::Busy);
+        slayer.spawn_slayer_core();
+
+        // Populate the slab – each index gets the value `index * 7`.
+        for i in 0..slayer.len() {
+            slayer.write(i, (i as u64).wrapping_mul(7));
+        }
+
+        // -------------------------------------------------------------
+        // Generate a vector of random indices that we will reuse for the
+        // entire benchmark run (to avoid RNG overhead inside the timed loop).
+        // -------------------------------------------------------------
+        let mut idxs = Vec::with_capacity(ops_per_run);
+        for _ in 0..ops_per_run {
+            let idx = rng.gen_range(0..slayer.len());
+            idxs.push(idx);
+        }
+
+        // -------------------------------------------------------------
+        // Benchmark: tight loop that only reads.
+        // -------------------------------------------------------------
+        group.bench_with_input(
+            BenchmarkId::from_parameter(channels),
+            &channels,
+            |b, &_|
+        {
+            b.iter(|| {
+                // We'll read all pre‑generated indices in order.
+                // `black_box` prevents the compiler from optimizing the reads away.
+                for &i in &idxs {
+                    let v = black_box(slayer.read(i));
+                    black_box(v);
+                }
+            })
+        });
+    }
+
+    group.finish();
+}
+
+criterion_group!(benches, read_latency_bench);
+criterion_main!(benches);
