@@ -41,4 +41,5 @@ pub use shm::ShmSlab;
 #[cfg(feature = "sidecar")]
 pub mod ffi;
 #[cfg(feature = "sidecar")]
+#[allow(unused_imports)]
 pub use ffi::*;
