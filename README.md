@@ -1,9 +1,5 @@
 # ⚡️ UltraSlayer – DRAM Refresh‑Stall Killer  
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Crates.io](https://img.shields.io/crates/v/ultraslayer.svg)](https://crates.io/crates/ultraslayer)
-[![Follow @absalomedia](https://img.shields.io/twitter/follow/absalomedia?style=social)](https://twitter.com/absalomedia)
-
 **UltraSlayer** is a lock‑free, hardware‑aware memory slab that eliminates the “DRAM refresh stall” (tREFI) tail‑latency that destroys nanosecond‑level determinism in High‑Frequency‑Trading (HFT) and other ultra‑low‑latency workloads.  
 
 It mirrors every hot‑path object across a configurable number of physical DRAM channels and lets a dedicated **Slayer Core** race the reads in parallel, guaranteeing that at least one channel will answer before a refresh can stall the request.
@@ -95,7 +91,7 @@ cargo build --release
 
 | Goal | Cargo command | What you get |
 |------|---------------|--------------|
-| **CLI demo** (`src/bin/ultraslayer_cli.rs`) | `cargo build --release --features cli` | `target/release/ultraslayer_cli` |
+| **CLI demo** (`examples/ultraslayer_cli.rs`) | `cargo build --release --features cli` | `target/release/examples/ultraslayer_cli` |
 | **C‑FFI side‑car** (`libultraslayer.so`) | `cargo build --release --features sidecar` | `target/release/libultraslayer.so` |
 | **Zero‑copy slices** (`src/slice.rs`) | `cargo build --release --features slice` | Enables the `.slice()` API in `UltraSlayer` |
 | **Benchmark harness** (Criterion) | `cargo bench --features benchmark` | Runs `benches/read_latency.rs` and prints latency tables |
@@ -107,10 +103,11 @@ The release profile already uses **full LTO**, `opt-level = 3`, `panic = "abort"
 
 ## ▶️ Running UltraSlayer (demo binary)
 
-### Linux (with Real-Time priority)
+### Linux (with Real‑Time priority)
 
 ```bash
-sudo chrt -f 99 taskset -c 2 target/release/ultraslayer_cli \
+# Use the binary located in the examples directory
+sudo chrt -f 99 taskset -c 2 target/release/examples/ultraslayer_cli \
     --channels 4 \
     --size 2GiB \
     --spin busy
@@ -119,7 +116,14 @@ sudo chrt -f 99 taskset -c 2 target/release/ultraslayer_cli \
 ### Windows
 
 ```powershell
-.\target\release\ultraslayer_cli.exe --channels 4 --size 2GiB --spin busy
+# Use the binary located in the examples directory
+.\target\release\examples\ultraslayer_cli.exe --channels 4 --size 2GiB --spin busy
+```
+
+**Alternatively, run directly via Cargo:**
+
+```bash
+cargo run --release --features cli --example ultraslayer_cli -- --channels 4 --size 2GiB --spin busy
 ```
 
 **Flags**
@@ -146,12 +150,27 @@ The benchmark creates slabs with 2, 4, and 8 channels, fills them with det
 
 ### 2️⃣ Stand‑alone micro‑benchmark binary  
 
+**Via Cargo:**
+
 ```bash
+cargo run --release --features benchmark --example benchmark -- --channels 4 --size 2GiB --ops 1_000_000 --spin busy
+```
+
+**Via binary (for Real-Time priority on Linux):**
+
+```bash
+# First, build the example
 cargo build --release --features benchmark
-# Linux:
-sudo chrt -f 99 taskset -c 2 target/release/benchmark --channels 4 --size 2GiB --ops 1_000_000 --spin busy
-# Windows:
-.\target\release\benchmark.exe --channels 4 --size 2GiB --ops 1_000_000 --spin busy
+
+# Then run the resulting binary from the examples folder
+sudo chrt -f 99 taskset -c 2 target/release/examples/benchmark \
+    --channels 4 --size 2GiB --ops 1_000_000 --spin busy
+```
+
+**Windows execution:**
+
+```powershell
+.\target\release\examples\benchmark.exe --channels 4 --size 2GiB --ops 1_000_000 --spin busy
 ```
 
 ---  
@@ -167,8 +186,7 @@ use ultraslayer::{UltraSlayer, SpinPolicy};
 fn main() {
     // 2 GiB slab, 4 mirrored channels, busy‑spin policy
     let slayer = Arc::new(
-        UltraSlayer::<u64>::new(4, 2 << 30) // Use .new() for allocation
-            .expect("failed to allocate UltraSlayer")
+        UltraSlayer::<u64>::new(4, 2 << 30) // Direct allocation
     );
     slayer.set_spin_policy(SpinPolicy::Busy);
     slayer.spawn_slayer_core(0);       // start core on CPU 0
@@ -182,6 +200,8 @@ fn main() {
     // let first_val = view[0];
 }
 ```
+
+All public methods (`read`, `write`, `slice`, `stats`, `set_spin_policy`, `pin_to_core`) are in `src/lib.rs`.
 
 ### B️ Non‑Rust Languages (C / Node / Python) – **Side‑car**  
 
@@ -218,7 +238,7 @@ ultraslayer/
 │   └─ slice.rs          ← zero‑copy slice view
 ├─ benches/
 │   └─ read_latency.rs   ← Criterion read‑latency benchmark
-├─ src/bin/
+├─ examples/
 │   ├─ ultraslayer_cli.rs    ← CLI demo binary (feature = "cli")
 │   └─ benchmark.rs      ← micro‑benchmark binary (feature = "benchmark")
 ├─ Cargo.toml
@@ -243,7 +263,7 @@ sudo sysctl -w vm.nr_hugepages=2048
 cargo build --release --features "cli sidecar slice"
 
 # 3️⃣ Run the demo (core 2, 4 channels, 2 GiB per channel)
-sudo chrt -f 99 taskset -c 2 target/release/ultraslayer_cli \
+sudo chrt -f 99 taskset -c 2 target/release/examples/ultraslayer_cli \
     --channels 4 --size 2GiB --spin busy
 ```
 
