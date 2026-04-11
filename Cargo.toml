@@ -1,9 +1,10 @@
 [package]
 name        = "ultraslayer"
-version     = "0.2.1"
+version     = "0.2.0"
 edition     = "2021"
 description = "Ultra‑low latency DRAM refresh‑stall prevention using hardware‑level hedging."
 license     = "Apache-2.0"
+readme      = "README.md"
 repository  = "https://github.com/absalomedia/ultraslayer"
 keywords    = ["hft", "low-latency", "dram", "refresh-stall", "mirroring"]
 categories  = ["algorithms", "concurrency", "memory-management"]

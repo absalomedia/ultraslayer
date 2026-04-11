@@ -48,10 +48,11 @@ Laurie Wired’s work introduced the concept of *hardware‑level hedging* to 
 | Feature | Description |
 |:-------:|-------------|
 | **Configurable channel count** | `--channels N` (2‑8 mirrors). |
-| **Huge‑Page support** | Uses `MAP_HUGETLB` when available → zero TLB misses. |
+| **Cross-Platform Memory** | Native `mmap` (Linux) and `VirtualAlloc` (Windows) support. |
+| **Huge‑Page support** | Uses `MAP_HUGETLB` on Linux $\rightarrow$ zero TLB misses. |
 | **Spin policies** | `busy` (full spin), `hybrid` (spin → yield), `sleep` (periodic pause). |
 | **Side‑car (`sidecar` feature)** | Builds a `cdylib` with a tiny C‑FFI (`ul_init`, `ul_read_u64`, …). |
-| **POSIX Shared‑Memory wrapper** (`src/shm.rs`) | `ShmSlab<T>` lets multiple processes map the same slab via `/dev/shm`. |
+| **POSIX Shared‑Memory wrapper** (`src/shm.rs`) | `ShmSlab<T>` lets multiple processes map the same slab via `/dev/shm` (Linux only). |
 | **Criterion benchmark harness** (`benchmark` feature) | `benches/read_latency.rs` measures nanosecond read latency for 2/4/8 channels. |
 | **CLI demo binary** (`cli` feature) | `src/bin/ultraslayer_cli.rs` parses flags, creates the slab, starts the core, and idles. |
 | **Zero‑copy slice view** (`slice` feature) | `src/slice.rs` exposes a raw‑pointer slice for bulk reads without copying. |
@@ -59,16 +60,15 @@ Laurie Wired’s work introduced the concept of *hardware‑level hedging* to 
 
 ---  
 
-## 📋 System Requirements (Linux)
+## 📋 System Requirements  
 
-| Requirement | How to satisfy |
-|--------------|-----------------|
-| **Linux kernel ≥ 5.10** | `uname -r` |
-| **Huge Pages** (recommended) | `sudo sysctl -w vm.nr_hugepages=2048` (~ 4 GiB) |
-| **≥ 2 DRAM channels** (different DIMMs / banks) | Verify with BIOS or `dmidecode`. |
-| **NUMA awareness** (optional) | Use `numactl` / `taskset` to bind process + memory to the same node. |
-| **CPU governor** | Set to `performance` (`cpupower frequency-set -g performance`). |
-| **Root / sudo** | Needed for `chrt`, `taskset`, huge‑page config. |
+| Requirement | Linux | Windows |
+|--------------|-----------------|-------------------|
+| **Kernel/OS** | Kernel $\ge$ 5.10 | Windows 10 / 11 |
+| **Huge Pages** | `sudo sysctl -w vm.nr_hugepages=2048` | Standard Virtual Memory (Automatic) |
+| **DRAM Channels** | $\ge$ 2 physical channels | $\ge$ 2 physical channels |
+| **CPU Affinity** | `taskset` / `chrt` | `SetThreadAffinityMask` (via `core_affinity`) |
+| **Permissions** | Root/Sudo for Huge Pages/RT priority | Administrator for certain memory flags |
 
 ---  
 
@@ -97,19 +97,25 @@ cargo build --release
 | **Benchmark harness** (Criterion) | `cargo bench --features benchmark` | Runs `benches/read_latency.rs` and prints latency tables |
 | **All features** | `cargo build --release --features "cli sidecar slice benchmark"` | Everything compiled together |
 
-The release profile already uses **full LTO**, `opt-level = 3`, `panic = "abort"` and a **single codegen unit** for maximum inlining.  If you prefer a faster build with virtually the same performance you can change `lto = "thin"` in `Cargo.toml`.
+The release profile already uses **full LTO**, `opt-level = 3`, `panic = "abort"` and a **single codegen unit** for maximum inlining.
 
 ---  
 
 ## ▶️ Running UltraSlayer (demo binary)
 
+### Linux (with Real-Time priority)
+
 ```bash
-# Example: 4 channels, 2 GiB per channel, busy‑spin policy,
-# pinned to core 2 with real‑time FIFO priority 99.
 sudo chrt -f 99 taskset -c 2 target/release/ultraslayer_cli \
     --channels 4 \
     --size 2GiB \
     --spin busy
+```
+
+### Windows
+
+```powershell
+.\target\release\ultraslayer_cli.exe --channels 4 --size 2GiB --spin busy
 ```
 
 **Flags**
@@ -119,8 +125,6 @@ sudo chrt -f 99 taskset -c 2 target/release/ultraslayer_cli \
 | `--channels N` | Number of DRAM mirrors (default 2). |
 | `--size <bytes>` | Total slab size **per channel** (e.g. `2GiB`, `512MiB`). |
 | `--spin <policy>` | `busy`, `hybrid`, or `sleep` (default `busy`). |
-
-The program prints a short status line and then idles, keeping the designated core at 100 % utilization.  Press **Ctrl‑C** to stop.
 
 ---  
 
@@ -134,38 +138,21 @@ UltraSlayer ships with two ways to benchmark latency.
 cargo bench --features benchmark
 ```
 
-The benchmark creates slabs with 2, 4, and 8 channels, fills them with deterministic data, then performs **1 000 000 random reads** per configuration while measuring **nanosecond‑resolution latency** (HDR histogram).  Sample output:
-
-```
-read_latency/2  time:   [62.1 ns 62.3 ns 62.5 ns]
-read_latency/4  time:   [61.8 ns 62.0 ns 62.2 ns]
-read_latency/8  time:   [61.6 ns 61.8 ns 62.0 ns]
-```
+The benchmark creates slabs with 2, 4, and 8 channels, fills them with deterministic data, then performs **1 000 000 random reads** per configuration while measuring **nanosecond‑resolution latency**.
 
 ### 2️⃣ Stand‑alone micro‑benchmark binary  
 
 ```bash
 cargo build --release --features benchmark
-sudo chrt -f 99 taskset -c 2 target/release/benchmark \
-    --channels 4 --size 2GiB --ops 1_000_000 --spin busy
-```
-
-The binary prints a concise summary:
-
-```
-Benchmark completed
-  Ops          : 1,000,000
-  Avg latency  : 68.3 ns
-  p99          : 85.0 ns
-  p99.99       : 101.2 ns
-  Throughput   : 14.6 M ops/s
+# Linux:
+sudo chrt -f 99 taskset -c 2 target/release/benchmark --channels 4 --size 2GiB --ops 1_000_000 --spin busy
+# Windows:
+.\target\release\benchmark.exe --channels 4 --size 2GiB --ops 1_000_000 --spin busy
 ```
 
 ---  
 
 ## 🔌 Integration Guide  
-
-UltraSlayer is intended to be the **hot‑storage** for the most latency‑sensitive data.  Below are three common integration patterns.
 
 ### A️ Pure Rust Engine  
 
@@ -176,12 +163,12 @@ use ultraslayer::{UltraSlayer, SpinPolicy};
 fn main() {
     // 2 GiB slab, 4 mirrored channels, busy‑spin policy
     let slayer = Arc::new(
-        UltraSlayer::<u64>::with_channels(4, 2 << 30)
+        UltraSlayer::<u64>::new(4, 2 << 30) // Use .new() for allocation
             .expect("failed to allocate UltraSlayer")
     );
     slayer.set_spin_policy(SpinPolicy::Busy);
-    slayer.spawn_slayer_core();       // start the background core
-    slayer.pin_to_core(3);            // keep it on core 3
+    slayer.spawn_slayer_core(0);       // start core on CPU 0
+    slayer.pin_to_core(0);            // pin current thread to core 0
 
     // Hot‑path usage (example: reading a price)
     let price = slayer.read(PRICE_IDX);
@@ -192,39 +179,21 @@ fn main() {
 }
 ```
 
-All public methods (`read`, `write`, `slice`, `stats`, `set_spin_policy`, `pin_to_core`) are in `src/lib.rs`.
-
 ### B️ Non‑Rust Languages (C / Node / Python) – **Side‑car**  
 
 ```bash
 cargo build --release --features sidecar
 ```
 
-You now have `target/release/libultraslayer.so`.  The exported C API (in `src/ffi.rs`) is:
+The exported C API (in `src/ffi.rs`) provides `ul_init`, `ul_start_core`, `ul_read_u64`, `ul_write_u64`, and `ul_destroy`.
 
-| C function | Description |
-|------------|-------------|
-| `ul_init(uint32_t channels, size_t size_bytes)` | Allocate a new slab of `u64`. Returns an opaque handle (`void*`). |
-| `ul_start_core(void* handle)` | Starts the Slayer core for the given handle. |
-| `ul_set_spin_policy(void* handle, int policy)` | `0=busy`, `1=hybrid`, `2=sleep`. |
-| `ul_read_u64(void* handle, size_t idx)` | Volatile read. |
-| `ul_write_u64(void* handle, size_t idx, uint64_t val)` | Volatile write. |
-| `ul_destroy(void* handle)` | Release the slab. |
-
-### C️ Multiple Processes – **POSIX Shared‑Memory**  
+### C️ Multiple Processes – **POSIX Shared‑Memory** (Linux Only)
 
 ```rust
 use ultraslayer::ShmSlab;
 
 // Process A – creates the slab
 let shm = ShmSlab::<u64>::create("ultra_slab", 4, 2 << 30)?;
-
-// Fill it once
-for i in 0..shm.len() {
-    shm.write(i, (i as u64).wrapping_mul(7));
-}
-
-// Optional: hand the slab to UltraSlayer for the full API
 let slayer = shm.into_ultraslayer();
 ```
 
@@ -239,8 +208,8 @@ ultraslayer/
 │   ├─ slab.rs           ← low‑level mirroring & volatile ops
 │   ├─ arch.rs           ← CPU‑affinity helpers
 │   ├─ reader.rs         ← internal read‑path logic
-│   ├─ main.rs           ← optional entry point for `cargo run`
-│   ├─ shm.rs            ← POSIX shared‑memory wrapper
+│   ├─ main.rs           ← optional entry point
+│   ├─ shm.rs            ← POSIX shared‑memory wrapper (Linux)
 │   ├─ ffi.rs            ← C‑FFI side‑car (feature = "sidecar")
 │   └─ slice.rs          ← zero‑copy slice view
 ├─ benches/
@@ -263,7 +232,7 @@ UltraSlayer is released under the **Apache License, Version 2.0**.
 ### TL;DR – Quick start for a typical HFT node  
 
 ```bash
-# 1️⃣ Reserve huge pages (once per boot)
+# 1️⃣ Reserve huge pages (Linux only)
 sudo sysctl -w vm.nr_hugepages=2048
 
 # 2️⃣ Build with the CLI demo + side‑car + slice view
