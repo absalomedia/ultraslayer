@@ -206,7 +206,7 @@ fn main() {
 }
 ```
 
-All public methods (`read`, `write`, `slice`, `stats`, `set_spin_policy`, `pin_to_core`) are in `src/lib.rs`.
+All public methods (`read`, `write`, `slice`, `stats`, `set_spin_policy`, `pin_to_core`) are exposed through the crate root (ultraslayer::UltraSlayer).
 
 ### B️ Non‑Rust Languages (C / Node / Python) – **Side‑car**  
 
