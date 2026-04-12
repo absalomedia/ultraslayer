@@ -180,9 +180,106 @@ sudo chrt -f 99 taskset -c 2 target/release/examples/benchmark \
 
 ---  
 
-## 🔌 Integration Guide  
+Here is the expanded **Integration Guide**. I have expanded the Sidecar section to include full, copy-pasteable implementation examples for both Python and Node.js, focusing on the real-world problem of handling floating-point prices over a `u64` FFI.
 
-### A️ Pure Rust Engine  
+---
+
+## 🔌 Integration Guide
+
+UltraSlayer is designed as the **"Hot Storage"** layer for your most critical data. Because the Slayer Core must spin at 100% CPU to maintain determinism, it should be treated as a dedicated hardware service rather than a standard library.
+
+### 🏗️ The Sidecar Architecture (For C++, Python, Node.js)
+
+If your strategy or risk engine is not written in Rust, use the **Sidecar Model**. In this pattern, UltraSlayer runs as a native shared library (`.so` or `.dll`), managing the hardware mirroring and the spinning core, while your application interacts with it via a lean C-FFI.
+
+**1. Build the Sidecar:**
+
+```bash
+cargo build --release --features sidecar
+# Produces target/release/libultraslayer.so (Linux) or .dll (Windows)
+```
+
+**2. The Integration Workflow:**
+The Sidecar uses an **opaque handle** pattern. You initialize the slab, start the hardware engine, and then perform volatile reads/writes using that handle.
+
+| Step | C-API Function | Purpose |
+|:---|:---|:---|
+| **Init** | `ul_init(channels, size)` | Allocates mirrored DRAM and returns a handle. |
+| **Ignite** | `ul_start_core(handle)` | Spawns the spinning Slayer Core on a physical CPU. |
+| **Access** | `ul_read_u64(handle, idx)` | Performs a hedged, stall-immune read. |
+| **Update** | `ul_write_u64(handle, idx, val)` | Mirrored write to all DRAM channels. |
+| **Tear Down** | `ul_destroy(handle)` | Stops the core and frees the slab. |
+
+#### 🐍 Python Integration
+
+Using `ctypes`, Python can treat UltraSlayer as a high-performance backend. Since the FFI uses `uint64`, we use the `struct` module to handle floating-point prices.
+
+```python
+import ctypes
+import struct
+
+# Load the shared library
+lib = ctypes.CDLL("./libultraslayer.so")
+
+# Define function signatures
+lib.ul_init.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+lib.ul_init.restype = ctypes.c_void_p
+lib.ul_start_core.argtypes = [ctypes.c_void_p]
+lib.ul_read_u64.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+lib.ul_read_u64.restype = ctypes.c_uint64
+lib.ul_write_u64.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint64]
+
+# 1. Setup: 4 channels, 1GiB slab
+handle = lib.ul_init(4, 1024 * 1024 * 1024)
+lib.ul_start_core(handle)
+
+# 2. Hot-Path: Write a float price as u64 bits
+price = 1250.50
+packed_price = struct.unpack('<Q', struct.pack('<d', price))[0]
+lib.ul_write_u64(handle, 0, packed_price)
+
+# 3. Hot-Path: Read with DRAM-stall immunity
+raw_val = lib.ul_read_u64(handle, 0)
+price = struct.unpack('<d', struct.pack('<Q', raw_val))[0]
+print(f"Slayer Read Price: {price}")
+
+lib.ul_destroy(handle)
+```
+
+#### 🟢 Node.js Integration
+
+Using `ffi-napi`, Node.js can interface with the slab. Note that `uint64` in C maps to `BigInt` in JavaScript.
+
+```typescript
+const ffi = require('ffi-napi');
+
+const lib = ffi.Library('./libultraslayer.so', {
+  'ul_init': ['pointer', ['uint32', 'size_t']],
+  'ul_start_core': ['int', ['pointer']],
+  'ul_read_u64': ['uint64', ['pointer', 'size_t']],
+  'ul_write_u64': ['void', ['pointer', 'size_t', 'uint64']],
+  'ul_destroy': ['void', ['pointer']],
+});
+
+// 1. Setup: 4 channels, 1GiB slab
+const handle = lib.ul_init(4, 1024 * 1024 * 1024);
+lib.ul_start_core(handle);
+
+// 2. Hot-Path: Read a price (returns as BigInt)
+const price = lib.ul_read_u64(handle, 0);
+console.log(`DRAM-hedged price: ${price}`);
+
+// 3. Hot-Path: Update price
+lib.ul_write_u64(handle, 0, 999888777n);
+
+lib.ul_destroy(handle);
+```
+
+---
+
+### 🦀 Pure Rust Integration
+
+For Rust-native engines, `UltraSlayer<T>` provides a type-safe wrapper. The key is to initialize the slab once and share it via `Arc` across your strategy threads.
 
 ```rust
 use std::sync::Arc;
@@ -206,25 +303,42 @@ fn main() {
 }
 ```
 
-All public methods (`read`, `write`, `slice`, `stats`, `set_spin_policy`, `pin_to_core`) are exposed through the crate root (ultraslayer::UltraSlayer).
+---
 
-### B️ Non‑Rust Languages (C / Node / Python) – **Side‑car**  
+### 🤝 Inter-Process Communication (IPC)
 
-```bash
-cargo build --release --features sidecar
-```
+If your **Market Data Feed** and your **Trading Strategy** live in different processes, use the `ShmSlab` wrapper. This uses POSIX shared memory to map the mirrored slab into multiple address spaces.
 
-The exported C API (in `src/ffi.rs`) provides `ul_init`, `ul_start_core`, `ul_read_u64`, `ul_write_u64`, and `ul_destroy`.
-
-### C️ Multiple Processes – **POSIX Shared‑Memory** (Linux Only)
+**Process A (The Feed):**
 
 ```rust
 use ultraslayer::ShmSlab;
 
-// Process A – creates the slab
+// Create the shared mirrored slab
 let shm = ShmSlab::<u64>::create("ultra_slab", 4, 2 << 30)?;
-let slayer = shm.into_ultraslayer();
+shm.write(PRICE_IDX, new_price);
 ```
+
+**Process B (The Strategy):**
+
+```rust
+use ultraslayer::ShmSlab;
+
+// Open the existing mirrored slab
+let shm = ShmSlab::<u64>::open("ultra_slab", 4, 2 << 30)?;
+let price = shm.read(PRICE_IDX); // Deterministic read
+```
+
+---
+
+### ⚙️ Integration Summary
+
+| Goal | Pattern | Best For... |
+|:---|:---|:---|
+| **Max Performance** | Pure Rust | Native HFT engines. |
+| **Polyglot Stack** | Sidecar (`.so`) | Python/Node.js strategies with a Rust driver. |
+| **Multi-Process** | `ShmSlab` | Separating Feed, Risk, and Strategy into different PIDs. |
+| **Bulk Processing** | `Slice` feature | Dumping the entire slab to a network buffer/log. |
 
 ---  
 
