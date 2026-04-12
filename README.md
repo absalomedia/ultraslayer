@@ -178,10 +178,6 @@ sudo chrt -f 99 taskset -c 2 target/release/examples/benchmark \
 .\target\release\examples\benchmark.exe --channels 4 --size 2GiB --ops 1_000_000 --spin busy
 ```
 
----  
-
-Here is the expanded **Integration Guide**. I have expanded the Sidecar section to include full, copy-pasteable implementation examples for both Python and Node.js, focusing on the real-world problem of handling floating-point prices over a `u64` FFI.
-
 ---
 
 ## 🔌 Integration Guide
