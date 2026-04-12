@@ -8,6 +8,7 @@ It mirrors every hot‑path object across a configurable number of physical DRAM
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Crates.io](https://img.shields.io/crates/v/ultraslayer.svg)](https://crates.io/crates/ultraslayer)
+![Crates.io Total Downloads](https://img.shields.io/crates/d/ultraslayer)
 [![Follow @absalomedia](https://img.shields.io/twitter/follow/absalomedia?style=social)](https://twitter.com/absalomedia)
 
 ---  
